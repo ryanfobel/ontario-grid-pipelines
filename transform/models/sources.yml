@@ -6,10 +6,10 @@ sources:
     schema: raw
     tables:
       - name: ieso_generation
-        description: IESO hourly generation by fuel type (2019–present)
+        description: IESO hourly generation by fuel type (2019–present, incremental)
         columns:
           - name: timestamp
-            description: Hour-start in ISO 8601 (UTC-offset naive, Ontario local time)
+            description: Hour-start ISO 8601, Ontario local time (no tz offset stored)
           - name: nuclear
           - name: gas
           - name: hydro
@@ -19,15 +19,21 @@ sources:
           - name: total
 
       - name: gridwatch_readings
-        description: Gridwatch.ca hourly readings (CO2 intensity + generation)
-        columns:
-          - name: timestamp
-          - name: co2_intensity_gco2_per_kwh
-          - name: generation_mw
+        description: >
+          Gridwatch.ca live readings — one row per hour, appended on each pipeline run.
+          Columns: timestamp, imports_mw, exports_mw, net_import_exports_mw,
+          power_generated_mw, ontario_demand_mw, total_emissions_tonnes,
+          co2e_intensity_gco2_per_kwh, {source}_mw / {source}_pct for
+          nuclear / hydro / gas / wind / biofuel / solar.
 
       - name: oeb_rates
-        description: OEB electricity rates by effective date and rate class
+        description: >
+          OEB historical electricity rates in long format.
+          One row per (effective_date, rate_type, rate_column).
         columns:
           - name: effective_date
-          - name: rate_class
-          - name: rate_cents_per_kwh
+          - name: rate_type
+            description: Section heading from the OEB page (e.g. "Time-of-Use Prices")
+          - name: rate_column
+            description: Column name from the rate table (e.g. "Off-Peak Price (¢ per kWh)")
+          - name: value_cents_per_kwh

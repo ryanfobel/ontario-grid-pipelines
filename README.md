@@ -55,6 +55,6 @@ scripts/
 ## Status
 
 - [x] IESO fuel-mix source (incremental, CSV 2019+)
-- [ ] gridwatch.ca source (port Selenium logic from ontario-grid-data)
-- [ ] OEB rates source (port BeautifulSoup logic from ontario-grid-data)
+- [x] gridwatch.ca source (Selenium/Chrome, scrapes live.gridwatch.ca)
+- [x] OEB rates source (BeautifulSoup, historical electricity rates in long format)
 - [ ] Pre-2019 IESO backfill (Excel files via migrate_historical.py)
