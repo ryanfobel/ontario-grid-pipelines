@@ -1,0 +1,83 @@
+name: pipeline
+
+on:
+  schedule:
+    # 06:00 UTC = 02:00 Eastern — well before peak activity, after midnight data is published
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: 'Sources to run (space-separated: ieso gridwatch oeb). Empty = all.'
+        required: false
+        default: ''
+      full_refresh:
+        description: 'Replace all data (full refresh)'
+        type: boolean
+        default: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Chrome
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends chromium-browser chromium-chromedriver
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Restore database from data branch
+        run: |
+          if git ls-remote --heads origin data | grep -q refs/heads/data; then
+            git fetch origin data
+            git show origin/data:ontario_grid.duckdb > ontario_grid.duckdb \
+              && echo "Database restored from data branch" \
+              || echo "Restore failed, starting fresh"
+          else
+            echo "No data branch yet, starting fresh"
+          fi
+
+      - name: Run dlt pipeline
+        run: |
+          ARGS=""
+          SOURCES="${{ github.event.inputs.sources }}"
+          if [ -n "$SOURCES" ]; then
+            ARGS="--sources $SOURCES"
+          fi
+          if [ "${{ github.event.inputs.full_refresh }}" = "true" ]; then
+            ARGS="$ARGS --full-refresh"
+          fi
+          python pipeline.py $ARGS --skip-dbt
+
+      - name: Run dbt transforms
+        run: dbt run --project-dir transform --profiles-dir transform
+
+      - name: Push database to data branch (single-commit force-push)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Stash the DB so it survives the branch switch
+          TMPDB=$(mktemp --suffix=.duckdb)
+          cp ontario_grid.duckdb "$TMPDB"
+
+          git checkout --orphan _data_tmp
+          git rm -rf . --quiet
+
+          cp "$TMPDB" ontario_grid.duckdb
+          git add -f ontario_grid.duckdb
+          git commit -m "data: $(date -u +%Y-%m-%dT%H:%M:%SZ) [skip ci]"
+          git push origin HEAD:data --force
+          rm -f "$TMPDB"

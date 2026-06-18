@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+venv/
+
+# dlt state and pipeline artifacts
+.dlt/
+
+# DuckDB database (stored on orphan data branch, not main)
+*.duckdb
+
+# dbt
+transform/target/
+transform/logs/
+transform/dbt_packages/
+
+# Chrome/Selenium
+chromedriver

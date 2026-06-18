@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "ontario-grid-pipelines"
+version = "0.1.0"
+description = "dlt + dbt pipelines for Ontario electricity grid data"
+requires-python = ">=3.11"
+dependencies = [
+    "dlt[duckdb]>=1.0",
+    "dbt-duckdb>=1.8",
+    "pandas>=2.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "selenium>=4.20",
+    "openpyxl>=3.1",
+    "lxml>=5.0",
+    "python-dateutil>=2.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pipelines*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

@@ -1,0 +1,33 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw tables loaded by dlt into the 'raw' dataset
+    schema: raw
+    tables:
+      - name: ieso_generation
+        description: IESO hourly generation by fuel type (2019–present)
+        columns:
+          - name: timestamp
+            description: Hour-start in ISO 8601 (UTC-offset naive, Ontario local time)
+          - name: nuclear
+          - name: gas
+          - name: hydro
+          - name: wind
+          - name: solar
+          - name: biofuel
+          - name: total
+
+      - name: gridwatch_readings
+        description: Gridwatch.ca hourly readings (CO2 intensity + generation)
+        columns:
+          - name: timestamp
+          - name: co2_intensity_gco2_per_kwh
+          - name: generation_mw
+
+      - name: oeb_rates
+        description: OEB electricity rates by effective date and rate class
+        columns:
+          - name: effective_date
+          - name: rate_class
+          - name: rate_cents_per_kwh
