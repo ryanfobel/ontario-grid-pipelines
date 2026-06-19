@@ -61,18 +61,56 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+# Install dependencies
+pip install -e ".[dev]"
+
+# Run all tests (35 unit tests, all offline/mocked)
+python -m pytest tests/ -v
+
+# Run the full pipeline (dlt extract + dbt transform)
+python pipeline.py --sources ieso gridwatch oeb
+
+# Run specific sources only
+python pipeline.py --sources gridwatch --skip-dbt
+
+# Full refresh (re-load all data)
+python pipeline.py --sources ieso --full-refresh
+
+# Migrate historical data from ontario-grid-data exports
+python scripts/migrate_historical.py --sources gridwatch ieso oeb
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+This repo is a migration from [ontario-grid-data](https://github.com/ryanfobel/ontario-grid-data) (CSV-commit pattern) to a proper pipeline:
+
+```
+Sources (dlt)          Storage       Transforms (dbt)
+─────────────────      ───────────   ────────────────────────────
+ieso/source.py    ──►  DuckDB        stg_ieso_generation
+gridwatch/source.py──► (raw schema)  stg_gridwatch
+oeb/source.py     ──►               stg_oeb_rates
+                                     fct_co2_intensity (mart)
+```
+
+**Data sources:**
+- **IESO fuel mix** — Monthly CSVs from ieso.ca (2019-05+). Pre-2019 backfill via GOC annual Excel files.
+- **Gridwatch** — Live Ontario grid scraper at `live.gridwatch.ca` using Selenium/Chrome headless.
+- **OEB rates** — Historical electricity rate tables from oeb.ca via BeautifulSoup HTML parsing.
+
+**Storage:** Single `ontario_grid.duckdb` file. Persisted across CI runs on an orphan `data` branch (single-commit force-push, no history accumulation).
+
+**IP blocking:** All `*.ieso.ca` and `oeb.ca` endpoints return 403 from datacenter IPs (including this Claude Code environment). Both sources handle this gracefully (warn + skip). They work normally from GitHub Actions.
+
+**dlt write disposition:** All resources use `merge` + `primary_key` for idempotent upserts.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- **dlt resources** live in `pipelines/<source>/source.py`, decorated with `@dlt.resource(write_disposition="merge", primary_key=...)`
+- **dbt models** in `transform/models/staging/` (views) and `transform/models/marts/` (tables)
+- **OEB rates** stored in long format: `(effective_date, rate_type, rate_column, value_cents_per_kwh)`
+- **IESO timestamps** are hour-ending in source, converted to hour-starting ISO 8601 (`HOUR=1` → `T00:00:00`)
+- **Tests** mock all HTTP calls; never make real network requests in tests
+- **Fuel columns:** `["nuclear", "gas", "hydro", "wind", "solar", "biofuel", "other", "total"]`
+- **bd** (beads) is used for all task tracking — do not create TODO lists or markdown task files
