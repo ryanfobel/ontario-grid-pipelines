@@ -1,0 +1,51 @@
+name: migrate
+
+on:
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Space-separated sources to migrate (gridwatch ieso oeb)"
+        required: false
+        default: "gridwatch ieso oeb"
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -e .
+
+      - name: Restore database from data branch (if exists)
+        run: |
+          if git fetch origin data 2>/dev/null; then
+            git show origin/data:ontario_grid.duckdb > ontario_grid.duckdb
+            echo "Restored database: $(du -sh ontario_grid.duckdb | cut -f1)"
+          else
+            echo "No data branch found — starting fresh"
+          fi
+
+      - name: Run historical migration
+        run: |
+          python scripts/migrate_historical.py --sources ${{ github.event.inputs.sources }}
+
+      - name: Push database to data branch
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin data 2>/dev/null || true
+          git checkout --orphan data-new
+          git rm -rf --cached . 2>/dev/null || true
+          git add -f ontario_grid.duckdb
+          git commit -m "Historical migration: ${{ github.event.inputs.sources }} ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git push -f origin data-new:data

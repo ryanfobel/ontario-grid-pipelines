@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """One-time migration: load historical data from ontario-grid-data into DuckDB.
 
+Fetches CSV files directly from the public ontario-grid-data GitHub repo.
+No local checkout needed.
+
 Usage:
-    python scripts/migrate_historical.py --data-dir /path/to/ontario-grid-data
-
-Expected layout inside that directory:
-    data/clean/
-    ├── gridwatch.ca/hourly/summary.csv   fuel-type + CO2 + demand data
-    ├── ieso.ca/hourly/output/            {year}.csv  — plant-level output
-    └── oeb.ca/electricity/               {RateType}.csv  — one file per rate type
-
-The IESO plant-level CSVs are aggregated to fuel types using the IESO daily
-XML report (same method as the live dlt source).  Requires network access.
+    python scripts/migrate_historical.py
+    python scripts/migrate_historical.py --sources gridwatch ieso oeb
+    python scripts/migrate_historical.py --data-dir /path/to/ontario-grid-data  # local override
 """
 from __future__ import annotations
 
@@ -21,6 +17,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 import duckdb
 import pandas as pd
@@ -31,6 +28,14 @@ XML_DAILY_URL = (
     "http://reports.ieso.ca/public/GenOutputCapability/PUB_GenOutputCapability_{date}.xml"
 )
 XML_NS = "{http://www.theIMO.com/schema}"
+
+RAW_BASE = "https://raw.githubusercontent.com/ryanfobel/ontario-grid-data/main/data/clean"
+IESO_YEARS = list(range(2010, 2027))
+OEB_RATE_FILES = [
+    "Tiered rates.csv",
+    "Time-of-Use (TOU) rates.csv",
+    "Ultra-Low Overnight (ULO).csv",
+]
 
 # Column mapping: old gridwatch summary.csv → dlt raw.gridwatch_readings schema
 GRIDWATCH_COL_MAP = {
@@ -58,7 +63,17 @@ GRIDWATCH_COL_MAP = {
 IESO_FUEL_COLS = ["nuclear", "gas", "hydro", "wind", "solar", "biofuel", "other", "total"]
 
 
-# ── Plant→fuel mapping (shared with live dlt source) ─────────────────────
+def _fetch_csv(url: str) -> pd.DataFrame | None:
+    try:
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        return pd.read_csv(io.StringIO(r.text), index_col=0, low_memory=False)
+    except requests.HTTPError as e:
+        print(f"  Warning: {url} → {e}", file=sys.stderr)
+        return None
+
+
+# ── Plant→fuel mapping ────────────────────────────────────────────────────
 
 def get_plant_fuel_mapping() -> dict[str, str]:
     print("  Fetching plant→fuel mapping from IESO XML...")
@@ -108,27 +123,28 @@ def infer_fuel_from_name(name: str) -> str:
 
 # ── Gridwatch ─────────────────────────────────────────────────────────────
 
-def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
-    summary_file = data_dir / "clean" / "gridwatch.ca" / "hourly" / "summary.csv"
-    if not summary_file.exists():
-        print(f"  Skipping gridwatch — not found: {summary_file}")
-        return
+def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
+    if data_dir:
+        path = data_dir / "clean" / "gridwatch.ca" / "hourly" / "summary.csv"
+        if not path.exists():
+            print(f"  Skipping gridwatch — not found: {path}")
+            return
+        df = pd.read_csv(path, index_col=0)
+    else:
+        url = f"{RAW_BASE}/gridwatch.ca/hourly/summary.csv"
+        print(f"  Fetching {url}")
+        df = _fetch_csv(url)
+        if df is None:
+            return
 
-    df = pd.read_csv(summary_file, index_col=0)
     df.index.name = "timestamp"
     df.index = pd.to_datetime(df.index).dt.strftime("%Y-%m-%dT%H:%M:%S")
-
     df = df.rename(columns=GRIDWATCH_COL_MAP)
-    # Keep only mapped columns (drop any extras)
     keep = [c for c in df.columns if c in GRIDWATCH_COL_MAP.values()]
-    df = df[keep].reset_index()
-    df = df.drop_duplicates(subset=["timestamp"])
+    df = df[keep].reset_index().drop_duplicates(subset=["timestamp"])
 
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS raw.gridwatch_readings AS
-        SELECT * FROM df WHERE 1=0
-    """)
+    con.execute("CREATE TABLE IF NOT EXISTS raw.gridwatch_readings AS SELECT * FROM df WHERE 1=0")
     con.execute("""
         INSERT INTO raw.gridwatch_readings
         SELECT * FROM df
@@ -139,28 +155,26 @@ def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
 
 # ── IESO plant-level → fuel-type aggregation ──────────────────────────────
 
-def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
-    ieso_dir = data_dir / "clean" / "ieso.ca" / "hourly" / "output"
-    if not ieso_dir.exists():
-        print(f"  Skipping IESO — not found: {ieso_dir}")
-        return
-
-    files = sorted(ieso_dir.glob("*.csv"))
-    if not files:
-        print("  IESO: no CSV files found")
-        return
-
+def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
     mapping = get_plant_fuel_mapping()
     rows: list[dict] = []
 
-    for f in files:
-        print(f"  IESO: processing {f.name}")
-        df = pd.read_csv(f, index_col=0, low_memory=False)
-        # Index is ISO timestamps (saved with tz info)
+    for year in IESO_YEARS:
+        if data_dir:
+            path = data_dir / "clean" / "ieso.ca" / "hourly" / "output" / f"{year}.csv"
+            if not path.exists():
+                continue
+            df = pd.read_csv(path, index_col=0, low_memory=False)
+        else:
+            url = f"{RAW_BASE}/ieso.ca/hourly/output/{year}.csv"
+            print(f"  Fetching IESO {year}")
+            df = _fetch_csv(url)
+            if df is None:
+                continue
+
         df.index = pd.to_datetime(df.index, utc=True).strftime("%Y-%m-%dT%H:%M:%S")
         df.columns = df.columns.str.strip()
-
-        gen_cols = [c for c in df.columns if c != "TOTAL"]
+        gen_cols = [c for c in df.columns if c.upper() != "TOTAL"]
 
         for ts, row in df.iterrows():
             fuel_totals: dict[str, float] = {k: 0.0 for k in IESO_FUEL_COLS if k != "total"}
@@ -170,75 +184,74 @@ def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
                     continue
                 fuel = mapping.get(gen.strip().upper()) or infer_fuel_from_name(gen)
                 fuel_totals[fuel if fuel in fuel_totals else "other"] += float(val)
-
-            total_val = row.get("TOTAL")
-            total = float(total_val) if pd.notna(total_val) else sum(fuel_totals.values())
+            total_col = next((c for c in df.columns if c.upper() == "TOTAL"), None)
+            total_val = row.get(total_col) if total_col else None
+            total = float(total_val) if total_val is not None and pd.notna(total_val) else sum(fuel_totals.values())
             rows.append({"timestamp": ts, **fuel_totals, "total": total})
 
     if not rows:
-        print("  IESO: no rows to insert")
+        print("  IESO: no rows found")
         return
 
     result = pd.DataFrame(rows).drop_duplicates(subset=["timestamp"])
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS raw.ieso_generation AS
-        SELECT * FROM result WHERE 1=0
-    """)
+    con.execute("CREATE TABLE IF NOT EXISTS raw.ieso_generation AS SELECT * FROM result WHERE 1=0")
     con.execute("""
         INSERT INTO raw.ieso_generation
         SELECT * FROM result
         WHERE timestamp NOT IN (SELECT timestamp FROM raw.ieso_generation)
     """)
-    print(f"  IESO: {len(result):,} rows")
+    print(f"  IESO: {len(result):,} rows from {IESO_YEARS[0]}–{IESO_YEARS[-1]}")
 
 
 # ── OEB rates ─────────────────────────────────────────────────────────────
 
-def migrate_oeb(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
-    oeb_dir = data_dir / "clean" / "oeb.ca" / "electricity"
-    if not oeb_dir.exists():
-        print(f"  Skipping OEB — not found: {oeb_dir}")
-        return
-
-    files = sorted(oeb_dir.glob("*.csv"))
-    if not files:
-        print("  OEB: no CSV files found")
-        return
-
+def migrate_oeb(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
     rows: list[dict] = []
-    for f in files:
-        rate_type = f.stem
-        df = pd.read_csv(f, index_col=0, parse_dates=True)
-        df.index.name = "effective_date"
 
+    for filename in OEB_RATE_FILES:
+        rate_type = filename.replace(".csv", "")
+        if data_dir:
+            path = data_dir / "clean" / "oeb.ca" / "electricity" / filename
+            if not path.exists():
+                print(f"  Skipping OEB {filename} — not found")
+                continue
+            df = pd.read_csv(path, index_col=0, parse_dates=True)
+        else:
+            url = f"{RAW_BASE}/oeb.ca/electricity/{quote(filename)}"
+            print(f"  Fetching OEB {filename}")
+            try:
+                r = requests.get(url, timeout=30)
+                r.raise_for_status()
+                df = pd.read_csv(io.StringIO(r.text), index_col=0, parse_dates=True)
+            except requests.HTTPError as e:
+                print(f"  Warning: {e}", file=sys.stderr)
+                continue
+
+        df.index.name = "effective_date"
         for ts, row in df.iterrows():
             for col, val in row.items():
                 rows.append({
-                    "effective_date": ts.date().isoformat(),
+                    "effective_date": pd.Timestamp(ts).date().isoformat(),
                     "rate_type": rate_type,
                     "rate_column": str(col),
                     "value_cents_per_kwh": float(val) if pd.notna(val) else None,
                 })
 
     if not rows:
-        print("  OEB: no rows to insert")
+        print("  OEB: no rows found")
         return
 
     result = pd.DataFrame(rows).drop_duplicates(
         subset=["effective_date", "rate_type", "rate_column"]
     )
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
-    con.execute("""
-        CREATE TABLE IF NOT EXISTS raw.oeb_rates AS
-        SELECT * FROM result WHERE 1=0
-    """)
+    con.execute("CREATE TABLE IF NOT EXISTS raw.oeb_rates AS SELECT * FROM result WHERE 1=0")
     con.execute("""
         INSERT INTO raw.oeb_rates
         SELECT * FROM result
-        WHERE (effective_date, rate_type, rate_column) NOT IN (
-            SELECT effective_date, rate_type, rate_column FROM raw.oeb_rates
-        )
+        WHERE (effective_date, rate_type, rate_column)
+          NOT IN (SELECT effective_date, rate_type, rate_column FROM raw.oeb_rates)
     """)
     print(f"  OEB: {len(result):,} rows")
 
@@ -248,18 +261,18 @@ def migrate_oeb(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--data-dir", required=True, type=Path,
-        help="Root of ontario-grid-data repo (contains data/clean/...)",
+        "--data-dir", type=Path, default=None,
+        help="Local ontario-grid-data checkout (default: fetch from GitHub)",
     )
-    parser.add_argument("--db", default=DB_PATH, help="Output DuckDB path")
+    parser.add_argument("--db", default=DB_PATH)
     parser.add_argument(
         "--sources", nargs="*", choices=["gridwatch", "ieso", "oeb"],
         default=["gridwatch", "ieso", "oeb"],
-        help="Which sources to migrate (default: all)",
     )
     args = parser.parse_args()
 
-    print(f"Migrating historical data from {args.data_dir} → {args.db}")
+    src = f"local:{args.data_dir}" if args.data_dir else "github:ryanfobel/ontario-grid-data"
+    print(f"Migrating historical data from {src} → {args.db}")
     con = duckdb.connect(args.db)
 
     if "gridwatch" in args.sources:
