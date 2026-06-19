@@ -18,3 +18,4 @@ transform/dbt_packages/
 
 # Chrome/Selenium
 chromedriver
+ontario_grid_pipelines.egg-info/
