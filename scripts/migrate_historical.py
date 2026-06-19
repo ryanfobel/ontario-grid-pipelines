@@ -116,7 +116,7 @@ def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
 
     df = pd.read_csv(summary_file, index_col=0)
     df.index.name = "timestamp"
-    df.index = pd.to_datetime(df.index, utc=True).dt.strftime("%Y-%m-%dT%H:%M:%S")
+    df.index = pd.to_datetime(df.index).dt.strftime("%Y-%m-%dT%H:%M:%S")
 
     df = df.rename(columns=GRIDWATCH_COL_MAP)
     # Keep only mapped columns (drop any extras)
@@ -129,7 +129,11 @@ def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
         CREATE TABLE IF NOT EXISTS raw.gridwatch_readings AS
         SELECT * FROM df WHERE 1=0
     """)
-    con.execute("INSERT OR IGNORE INTO raw.gridwatch_readings SELECT * FROM df")
+    con.execute("""
+        INSERT INTO raw.gridwatch_readings
+        SELECT * FROM df
+        WHERE timestamp NOT IN (SELECT timestamp FROM raw.gridwatch_readings)
+    """)
     print(f"  gridwatch: {len(df):,} rows")
 
 
@@ -181,7 +185,11 @@ def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
         CREATE TABLE IF NOT EXISTS raw.ieso_generation AS
         SELECT * FROM result WHERE 1=0
     """)
-    con.execute("INSERT OR IGNORE INTO raw.ieso_generation SELECT * FROM result")
+    con.execute("""
+        INSERT INTO raw.ieso_generation
+        SELECT * FROM result
+        WHERE timestamp NOT IN (SELECT timestamp FROM raw.ieso_generation)
+    """)
     print(f"  IESO: {len(result):,} rows")
 
 
@@ -225,7 +233,13 @@ def migrate_oeb(con: duckdb.DuckDBPyConnection, data_dir: Path) -> None:
         CREATE TABLE IF NOT EXISTS raw.oeb_rates AS
         SELECT * FROM result WHERE 1=0
     """)
-    con.execute("INSERT OR IGNORE INTO raw.oeb_rates SELECT * FROM result")
+    con.execute("""
+        INSERT INTO raw.oeb_rates
+        SELECT * FROM result
+        WHERE (effective_date, rate_type, rate_column) NOT IN (
+            SELECT effective_date, rate_type, rate_column FROM raw.oeb_rates
+        )
+    """)
     print(f"  OEB: {len(result):,} rows")
 
 
