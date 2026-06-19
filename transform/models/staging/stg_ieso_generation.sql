@@ -1,5 +1,11 @@
 {{ config(materialized='view') }}
 
+{% if not source_exists('ieso_generation') %}
+select null::timestamptz as ts, 0::double as nuclear_mw, 0::double as gas_mw,
+       0::double as hydro_mw, 0::double as wind_mw, 0::double as solar_mw,
+       0::double as biofuel_mw, 0::double as other_mw, 0::double as total_mw
+where false
+{% else %}
 select
     timestamp::timestamptz          as ts,
     coalesce(nuclear, 0)::double    as nuclear_mw,
@@ -12,3 +18,4 @@ select
     coalesce(other, 0)::double      as other_mw,
     coalesce(total, 0)::double      as total_mw
 from {{ source('raw', 'ieso_generation') }}
+{% endif %}
