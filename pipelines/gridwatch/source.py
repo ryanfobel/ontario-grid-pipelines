@@ -95,9 +95,10 @@ def _scrape(driver: webdriver.Chrome) -> dict:
     return record
 
 
-def _parse_timestamp(time_of_reading: str) -> str:
+def _parse_timestamp(time_of_reading: str, today: dt.date | None = None) -> str:
     """Convert 'Thu Oct 14, 8 AM - 9 AM' → ISO 8601 datetime string (Eastern local)."""
-    m = re.match(r"\w+ (\w+) (\d+), (\d+) (AM|PM)", time_of_reading)
+    # \s+ handles the double-space IESO uses before single-digit days ("Jan  5")
+    m = re.match(r"\w+ (\w+)\s+(\d+), (\d+) (AM|PM)", time_of_reading)
     if not m:
         raise ValueError(f"Unexpected timeOfReading format: {time_of_reading!r}")
     month_str, day_str, hour_str, ampm = m.groups()
@@ -106,10 +107,11 @@ def _parse_timestamp(time_of_reading: str) -> str:
         hour += 12
     elif ampm == "AM" and hour == 12:
         hour = 0
+    today = today or dt.date.today()
     month = dt.datetime.strptime(month_str, "%b").month
-    year = dt.datetime.now().year
+    year = today.year
     # Edge case: page shows December reading in January
-    if dt.datetime.now().month == 1 and month == 12:
+    if today.month == 1 and month == 12:
         year -= 1
     return dt.datetime(year, month, int(day_str), hour).isoformat()
 

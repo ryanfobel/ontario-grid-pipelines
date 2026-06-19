@@ -31,8 +31,20 @@ def oeb_source() -> dlt.SourceReference:
     primary_key=["effective_date", "rate_type", "rate_column"],
 )
 def oeb_rates() -> Iterator[dict]:
-    r = requests.get(OEB_ELECTRICITY_URL, timeout=30)
-    r.raise_for_status()
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        )
+    }
+    try:
+        r = requests.get(OEB_ELECTRICITY_URL, headers=headers, timeout=30)
+        r.raise_for_status()
+    except requests.HTTPError as exc:
+        # OEB blocks datacenter IPs (x-deny-reason: host_not_allowed).
+        # Run locally and commit the result, or seed via migrate_historical.py.
+        print(f"Warning: OEB fetch blocked ({exc}). Skipping — use migrate_historical.py or run locally.")
+        return
     soup = BeautifulSoup(r.content.decode("utf-8"), "lxml")
 
     # Each h2 with > 1 child is a rate-type heading; tables follow in the same order

@@ -57,7 +57,10 @@ def ieso_source() -> dlt.SourceReference:
 def ieso_generation(
     updated_at: dlt.sources.incremental[str] = dlt.sources.incremental(
         "timestamp",
-        initial_value="2010-01-01T00:00:00",
+        # Default start: 2019-05 (fuel-mix CSV available, no large Excel downloads).
+        # To backfill 2010-2018 run migrate_historical.py or set initial_value to
+        # "2010-01-01T00:00:00" and trigger a --full-refresh.
+        initial_value="2019-05-01T00:00:00",
     ),
 ) -> Iterator[dict]:
     start = date.fromisoformat(updated_at.start_value[:10])
