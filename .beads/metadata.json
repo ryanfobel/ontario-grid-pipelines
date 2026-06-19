@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "ontario_grid_pipelines",
+  "project_id": "079acee0-746e-4d09-8c88-041cc7ded34b"
+}

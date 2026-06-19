@@ -19,3 +19,9 @@ transform/dbt_packages/
 # Chrome/Selenium
 chromedriver
 ontario_grid_pipelines.egg-info/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
