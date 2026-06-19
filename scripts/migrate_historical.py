@@ -144,11 +144,14 @@ def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> 
     df = df[keep].reset_index().drop_duplicates(subset=["timestamp"])
 
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
-    con.execute("CREATE TABLE IF NOT EXISTS raw.gridwatch_readings AS SELECT * FROM df WHERE 1=0")
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS raw.gridwatch_readings AS
+        SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM df WHERE 1=0
+    """)
     con.execute("""
         INSERT INTO raw.gridwatch_readings
-        SELECT * FROM df
-        WHERE timestamp NOT IN (SELECT timestamp FROM raw.gridwatch_readings)
+        SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM df
+        WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.gridwatch_readings)
     """)
     print(f"  gridwatch: {len(df):,} rows")
 
@@ -195,11 +198,14 @@ def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
 
     result = pd.DataFrame(rows).drop_duplicates(subset=["timestamp"])
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
-    con.execute("CREATE TABLE IF NOT EXISTS raw.ieso_generation AS SELECT * FROM result WHERE 1=0")
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS raw.ieso_generation AS
+        SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM result WHERE 1=0
+    """)
     con.execute("""
         INSERT INTO raw.ieso_generation
-        SELECT * FROM result
-        WHERE timestamp NOT IN (SELECT timestamp FROM raw.ieso_generation)
+        SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM result
+        WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.ieso_generation)
     """)
     print(f"  IESO: {len(result):,} rows from {IESO_YEARS[0]}–{IESO_YEARS[-1]}")
 
