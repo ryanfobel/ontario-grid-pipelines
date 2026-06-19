@@ -149,7 +149,7 @@ def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> 
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM df WHERE 1=0
     """)
     con.execute("""
-        INSERT INTO raw.gridwatch_readings
+        INSERT INTO raw.gridwatch_readings BY NAME
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM df
         WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.gridwatch_readings)
     """)
@@ -203,7 +203,7 @@ def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM result WHERE 1=0
     """)
     con.execute("""
-        INSERT INTO raw.ieso_generation
+        INSERT INTO raw.ieso_generation BY NAME
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM result
         WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.ieso_generation)
     """)
