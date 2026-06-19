@@ -1,0 +1,22 @@
+version: 2
+
+models:
+  - name: fct_grid_generation
+    description: Hourly IESO generation with clean energy percentage.
+    columns:
+      - name: hour
+        data_tests:
+          - not_null
+          - unique
+      - name: total_mw
+        data_tests: [not_null]
+      - name: clean_pct
+        data_tests: [not_null]
+
+  - name: fct_co2_intensity
+    description: Wide hourly fact — IESO fuel mix joined with gridwatch live readings.
+    columns:
+      - name: hour
+        data_tests:
+          - not_null
+          - unique

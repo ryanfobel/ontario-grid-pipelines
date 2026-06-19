@@ -27,7 +27,11 @@ def run_dlt(sources: list[str], full_refresh: bool = False) -> None:
         "oeb": oeb_source,
     }
     for name in sources:
-        load_info = pipeline.run(source_map[name](), write_disposition=disposition)
+        source = source_map[name]()
+        # Freeze schema: unexpected new columns or data types raise an error
+        # rather than silently altering the table. Evolve intentionally.
+        source.schema_contract = {"columns": "freeze", "data_type": "freeze"}
+        load_info = pipeline.run(source, write_disposition=disposition)
         print(load_info)
 
 

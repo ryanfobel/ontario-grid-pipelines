@@ -64,10 +64,24 @@ jobs:
           SOURCES="${{ github.event.inputs.sources }}"
           [ -n "$SOURCES" ] && ARGS="--sources $SOURCES"
           [ "${{ github.event.inputs.full_refresh }}" = "true" ] && ARGS="$ARGS --full-refresh"
-          python pipeline.py $ARGS --skip-dbt
+          # Run each source independently so a single failure doesn't block others.
+          if [ -n "$SOURCES" ]; then
+            for SOURCE in $SOURCES; do
+              python pipeline.py --sources $SOURCE --skip-dbt $( [ "${{ github.event.inputs.full_refresh }}" = "true" ] && echo "--full-refresh" ) || \
+                echo "WARNING: source $SOURCE failed, continuing"
+            done
+          else
+            for SOURCE in ieso gridwatch oeb; do
+              python pipeline.py --sources $SOURCE --skip-dbt || \
+                echo "WARNING: source $SOURCE failed, continuing"
+            done
+          fi
 
       - name: Run dbt transforms
         run: dbt run --project-dir transform --profiles-dir transform
+
+      - name: Run dbt tests
+        run: dbt test --project-dir transform --profiles-dir transform --store-failures
 
       - name: Push database to data branch (single-commit force-push)
         run: |
