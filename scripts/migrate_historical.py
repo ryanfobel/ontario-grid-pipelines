@@ -145,13 +145,13 @@ def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> 
 
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
     con.execute("""
-        CREATE TABLE IF NOT EXISTS raw.gridwatch_readings AS
+        CREATE TABLE IF NOT EXISTS raw.gridwatch_readings_historical AS
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM df WHERE 1=0
     """)
     con.execute("""
-        INSERT INTO raw.gridwatch_readings BY NAME
+        INSERT INTO raw.gridwatch_readings_historical BY NAME
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM df
-        WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.gridwatch_readings)
+        WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.gridwatch_readings_historical)
     """)
     print(f"  gridwatch: {len(df):,} rows")
 
@@ -199,13 +199,13 @@ def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
     result = pd.DataFrame(rows).drop_duplicates(subset=["timestamp"])
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
     con.execute("""
-        CREATE TABLE IF NOT EXISTS raw.ieso_generation AS
+        CREATE TABLE IF NOT EXISTS raw.ieso_generation_historical AS
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM result WHERE 1=0
     """)
     con.execute("""
-        INSERT INTO raw.ieso_generation BY NAME
+        INSERT INTO raw.ieso_generation_historical BY NAME
         SELECT timestamp::TIMESTAMP AS timestamp, * EXCLUDE (timestamp) FROM result
-        WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.ieso_generation)
+        WHERE timestamp::TIMESTAMP NOT IN (SELECT timestamp FROM raw.ieso_generation_historical)
     """)
     print(f"  IESO: {len(result):,} rows from {IESO_YEARS[0]}–{IESO_YEARS[-1]}")
 
@@ -252,12 +252,12 @@ def migrate_oeb(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
         subset=["effective_date", "rate_type", "rate_column"]
     )
     con.execute("CREATE SCHEMA IF NOT EXISTS raw")
-    con.execute("CREATE TABLE IF NOT EXISTS raw.oeb_rates AS SELECT * FROM result WHERE 1=0")
+    con.execute("CREATE TABLE IF NOT EXISTS raw.oeb_rates_historical AS SELECT * FROM result WHERE 1=0")
     con.execute("""
-        INSERT INTO raw.oeb_rates
+        INSERT INTO raw.oeb_rates_historical BY NAME
         SELECT * FROM result
         WHERE (effective_date, rate_type, rate_column)
-          NOT IN (SELECT effective_date, rate_type, rate_column FROM raw.oeb_rates)
+          NOT IN (SELECT effective_date, rate_type, rate_column FROM raw.oeb_rates_historical)
     """)
     print(f"  OEB: {len(result):,} rows")
 
