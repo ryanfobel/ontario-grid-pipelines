@@ -25,3 +25,4 @@ ontario_grid_pipelines.egg-info/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+transform/.user.yml
