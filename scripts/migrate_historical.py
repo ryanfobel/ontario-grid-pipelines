@@ -183,7 +183,7 @@ def migrate_ieso(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> None:
             fuel_totals: dict[str, float] = {k: 0.0 for k in IESO_FUEL_COLS if k != "total"}
             for gen in gen_cols:
                 val = row.get(gen)
-                if pd.isna(val):
+                if pd.isna(val) or (isinstance(val, str) and not val.strip()):
                     continue
                 fuel = mapping.get(gen.strip().upper()) or infer_fuel_from_name(gen)
                 fuel_totals[fuel if fuel in fuel_totals else "other"] += float(val)
