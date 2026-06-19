@@ -138,7 +138,7 @@ def migrate_gridwatch(con: duckdb.DuckDBPyConnection, data_dir: Path | None) -> 
             return
 
     df.index.name = "timestamp"
-    df.index = pd.to_datetime(df.index, utc=True).dt.tz_localize(None).dt.strftime("%Y-%m-%dT%H:%M:%S")
+    df.index = pd.to_datetime(df.index, utc=True).tz_localize(None).strftime("%Y-%m-%dT%H:%M:%S")
     df = df.rename(columns=GRIDWATCH_COL_MAP)
     keep = [c for c in df.columns if c in GRIDWATCH_COL_MAP.values()]
     df = df[keep].reset_index().drop_duplicates(subset=["timestamp"])
