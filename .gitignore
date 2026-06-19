@@ -27,3 +27,7 @@ ontario_grid_pipelines.egg-info/
 .beads/proxieddb/
 transform/.user.yml
 .beads/interactions.jsonl
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.observablehq/cache/
+dashboard/src/data/*.parquet
