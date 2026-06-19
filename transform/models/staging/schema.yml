@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: stg_ieso_generation
+    description: Cleaned IESO hourly generation by fuel type.
+    columns:
+      - name: ts
+        description: Hour-start timestamp (Ontario local, no tz offset)
+        data_tests:
+          - not_null
+          - unique
+      - name: nuclear_mw
+        data_tests: [not_null]
+      - name: gas_mw
+        data_tests: [not_null]
+      - name: hydro_mw
+        data_tests: [not_null]
+      - name: wind_mw
+        data_tests: [not_null]
+      - name: solar_mw
+        data_tests: [not_null]
+      - name: biofuel_mw
+        data_tests: [not_null]
+      - name: total_mw
+        data_tests: [not_null]
+
+  - name: stg_gridwatch
+    description: Cleaned gridwatch.ca live readings.
+    columns:
+      - name: ts
+        data_tests:
+          - not_null
+          - unique
+      - name: ontario_demand_mw
+        data_tests: [not_null]
+      - name: co2e_intensity_gco2_per_kwh
+        data_tests: [not_null]
+
+  - name: stg_oeb_rates
+    description: OEB historical electricity rates in long format.
+    columns:
+      - name: effective_date
+        data_tests: [not_null]
+      - name: rate_type
+        data_tests: [not_null]
+      - name: rate_column
+        data_tests: [not_null]
+      - name: value_cents_per_kwh
+        data_tests: [not_null]

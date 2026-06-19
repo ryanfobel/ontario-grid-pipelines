@@ -1,0 +1,6 @@
+ontario_grid:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('ONTARIO_GRID_DB', '../ontario_grid.duckdb') }}"

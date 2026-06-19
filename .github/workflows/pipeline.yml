@@ -1,0 +1,101 @@
+name: pipeline
+
+on:
+  schedule:
+    # 06:00 UTC = 02:00 Eastern — after midnight data is published, before peak activity
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: 'Sources to run (space-separated: ieso gridwatch oeb). Empty = all.'
+        required: false
+        default: ''
+      full_refresh:
+        description: 'Replace all data (full refresh)'
+        type: boolean
+        default: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest tests/ -v
+
+  run:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Restore database from data branch
+        run: |
+          if git ls-remote --heads origin data | grep -q refs/heads/data; then
+            git fetch origin data
+            if git show origin/data:ontario_grid.duckdb > ontario_grid.duckdb 2>/dev/null; then
+              echo "Database restored ($(du -sh ontario_grid.duckdb | cut -f1))"
+            else
+              echo "Restore failed — starting fresh"
+              rm -f ontario_grid.duckdb
+            fi
+          else
+            echo "No data branch yet — first run, starting fresh"
+          fi
+
+      - name: Run dlt pipeline
+        run: |
+          ARGS=""
+          SOURCES="${{ github.event.inputs.sources }}"
+          [ -n "$SOURCES" ] && ARGS="--sources $SOURCES"
+          [ "${{ github.event.inputs.full_refresh }}" = "true" ] && ARGS="$ARGS --full-refresh"
+          # Run each source independently so a single failure doesn't block others.
+          if [ -n "$SOURCES" ]; then
+            for SOURCE in $SOURCES; do
+              python pipeline.py --sources $SOURCE --skip-dbt $( [ "${{ github.event.inputs.full_refresh }}" = "true" ] && echo "--full-refresh" ) || \
+                echo "WARNING: source $SOURCE failed, continuing"
+            done
+          else
+            for SOURCE in ieso gridwatch oeb; do
+              python pipeline.py --sources $SOURCE --skip-dbt || \
+                echo "WARNING: source $SOURCE failed, continuing"
+            done
+          fi
+
+      - name: Run dbt transforms
+        run: dbt run --project-dir transform --profiles-dir transform
+
+      - name: Run dbt tests
+        run: dbt test --project-dir transform --profiles-dir transform --store-failures
+
+      - name: Push database to data branch (single-commit force-push)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          TMPDB=$(mktemp --suffix=.duckdb)
+          cp ontario_grid.duckdb "$TMPDB"
+
+          git checkout --orphan _data_tmp
+          git rm -rf . --quiet
+
+          cp "$TMPDB" ontario_grid.duckdb
+          git add -f ontario_grid.duckdb
+          git commit -m "data: $(date -u +%Y-%m-%dT%H:%M:%SZ) [skip ci]"
+          git push origin HEAD:data --force
+          rm -f "$TMPDB"
