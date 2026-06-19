@@ -26,3 +26,4 @@ ontario_grid_pipelines.egg-info/
 .beads-credential-key
 .beads/proxieddb/
 transform/.user.yml
+.beads/interactions.jsonl
