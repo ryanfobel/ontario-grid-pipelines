@@ -26,6 +26,15 @@ sources:
           co2e_intensity_gco2_per_kwh, {source}_mw / {source}_pct for
           nuclear / hydro / gas / wind / biofuel / solar.
 
+      - name: ieso_generation_historical
+        description: IESO hourly generation by fuel type (2010–2026, migrated from ontario-grid-data)
+
+      - name: gridwatch_readings_historical
+        description: Gridwatch.ca historical readings migrated from ontario-grid-data
+
+      - name: oeb_rates_historical
+        description: OEB historical rates migrated from ontario-grid-data
+
       - name: oeb_rates
         description: >
           OEB historical electricity rates in long format.
