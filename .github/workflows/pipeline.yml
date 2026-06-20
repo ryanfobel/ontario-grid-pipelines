@@ -2,8 +2,7 @@ name: pipeline
 
 on:
   schedule:
-    # 06:00 UTC = 02:00 Eastern — after midnight data is published, before peak activity
-    - cron: '0 6 * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       sources:
