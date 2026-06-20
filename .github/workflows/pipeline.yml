@@ -2,7 +2,8 @@ name: pipeline
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/15 * * * *'   # gridwatch — live data updates every 15 min
+    - cron: '0 8 * * *'      # oeb — rates change quarterly, daily check is plenty
   workflow_dispatch:
     inputs:
       sources:
@@ -63,6 +64,8 @@ jobs:
           # via workflow_dispatch since they 403 from CI IPs and change infrequently.
           if [ -n "${{ github.event.inputs.sources }}" ]; then
             SOURCES="${{ github.event.inputs.sources }}"
+          elif [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" = "0 8 * * *" ]; then
+            SOURCES="oeb"
           elif [ "${{ github.event_name }}" = "schedule" ]; then
             SOURCES="gridwatch"
           else
