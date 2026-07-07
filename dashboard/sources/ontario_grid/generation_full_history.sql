@@ -7,7 +7,7 @@ SELECT
     ROUND(AVG(biofuel_mw), 0) as avg_biofuel,
     ROUND(AVG(gas_mw), 0) as avg_gas,
     ROUND(AVG(total_mw), 0) as avg_total,
-    ROUND(AVG(clean_pct) * 100, 1) as avg_clean_pct
+    ROUND(AVG(clean_pct), 1) as avg_clean_pct
 FROM main.fct_grid_generation
 GROUP BY DATE_TRUNC('month', hour)
 ORDER BY month

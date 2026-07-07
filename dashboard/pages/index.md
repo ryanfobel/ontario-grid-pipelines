@@ -21,7 +21,7 @@ SELECT * FROM ontario_grid.co2trend
 <BigValue
     data={latest}
     value=clean_pct
-    fmt='pct1'
+    fmt='#,##0.0"%"'
     title='Clean Energy'
 />
 
