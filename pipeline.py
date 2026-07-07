@@ -17,10 +17,14 @@ ALL_SOURCES = ["ieso", "gridwatch", "oeb"]
 
 FRESHNESS_THRESHOLD: dict[str, timedelta] = {
     "gridwatch": timedelta(hours=1),
+    "ieso": timedelta(days=1),
+    "oeb": timedelta(days=7),
 }
 
 FRESHNESS_QUERY: dict[str, str] = {
-    "gridwatch": "SELECT max(timestamp) FROM raw.gridwatch_readings",
+    "gridwatch": "SELECT epoch_ms(max(timestamp)) FROM raw.gridwatch_readings",
+    "ieso": "SELECT epoch_ms(max(timestamp)) FROM raw.ieso_generation",
+    "oeb": "SELECT epoch_ms(max(effective_date)) FROM raw.oeb_rates",
 }
 
 
@@ -32,11 +36,16 @@ def is_fresh(source: str) -> bool:
         con = duckdb.connect(DB_PATH, read_only=True)
         result = con.execute(FRESHNESS_QUERY[source]).fetchone()
         con.close()
-        if result and result[0]:
-            age = datetime.now(timezone.utc) - result[0].replace(tzinfo=timezone.utc)
-            return age < FRESHNESS_THRESHOLD[source]
-    except Exception:
-        pass
+        if result and result[0] is not None:
+            # Convert epoch milliseconds to datetime
+            last_update = datetime.fromtimestamp(result[0] / 1000, tz=timezone.utc)
+            age = datetime.now(timezone.utc) - last_update
+            is_data_fresh = age < FRESHNESS_THRESHOLD[source]
+            if is_data_fresh:
+                print(f"✓ {source} data is fresh (age: {age}, threshold: {FRESHNESS_THRESHOLD[source]})")
+            return is_data_fresh
+    except Exception as e:
+        print(f"⚠ Freshness check failed for {source}: {e}")
     return False
 
 
@@ -55,8 +64,9 @@ def run_dlt(sources: list[str], full_refresh: bool = False) -> None:
     }
     for name in sources:
         if not full_refresh and is_fresh(name):
-            print(f"Skipping {name} — data is less than {FRESHNESS_THRESHOLD[name]} old")
+            print(f"⊘ Skipping {name} — data is less than {FRESHNESS_THRESHOLD[name]} old")
             continue
+        print(f"→ Running {name} source")
         source = source_map[name]()
         # Freeze schema: unexpected new columns or data types raise an error
         # rather than silently altering the table. Evolve intentionally.

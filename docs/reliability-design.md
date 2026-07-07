@@ -22,44 +22,28 @@ This document outlines reliability improvements for the ontario-grid-pipelines d
 
 ## Proposed Enhancements
 
-### 1. Retry Logic with Exponential Backoff
+### 1. Retry Logic with Exponential Backoff ✅ IMPLEMENTED
 
 **Problem**: Transient network failures, timeouts, and rate limits cause unnecessary pipeline failures.
 
 **Solution**: Add retry decorator using `tenacity` library.
 
-```python
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log
-)
-import logging
-
-logger = logging.getLogger(__name__)
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=2, min=2, max=30),
-    retry=retry_if_exception_type((requests.Timeout, requests.ConnectionError)),
-    before_sleep=before_sleep_log(logger, logging.WARNING)
-)
-def fetch_with_retry(url: str, **kwargs) -> requests.Response:
-    """Fetch URL with exponential backoff retry."""
-    return requests.get(url, **kwargs)
-```
+**Implementation Status**: ✅ Complete (2026-07-07)
+- Added `tenacity>=8.0` to pyproject.toml
+- Created `pipelines/retry_utils.py` with `@retry_http_request` decorator
+- Applied to all HTTP requests in:
+  - `pipelines/ieso/source.py`: `_fetch_csv()`, `_fetch_excel()`, `_fetch_xml()`
+  - `pipelines/oeb/source.py`: `_fetch_oeb_page()`
+  - `pipelines/gridwatch/source.py`: `_scrape()` (Selenium WebDriver exceptions)
+- Comprehensive test coverage in `tests/test_retry_utils.py`
 
 **Configuration**:
 - 3 attempts maximum
-- Exponential backoff: 2s, 4s, 8s (capped at 30s)
-- Retry on: `Timeout`, `ConnectionError`, `429 Too Many Requests`
+- Exponential backoff: 2s → 4s → 8s (capped at 30s)
+- Retry on: `Timeout`, `ConnectionError`, `HTTPError` with status 429
 - Log each retry with backoff duration
 
-**Implementation**: Apply to all HTTP requests in ieso, gridwatch, oeb sources.
-
-**Beads**: open-data-coop-vy4
+**Beads**: open-data-coop-vy4 (closed)
 
 ---
 
@@ -257,16 +241,19 @@ def validate_pipeline_output(db_path: str) -> ValidationResult:
 
 ---
 
-### 5. Extended Freshness Checks
+### 5. Extended Freshness Checks ✅ IMPLEMENTED
 
 **Problem**: Current freshness logic only covers gridwatch. Other sources waste CI minutes on redundant runs.
 
 **Solution**: Generalize freshness checks to all sources with appropriate thresholds.
 
+**Implementation Status**: Completed in bead open-data-coop-07x
+
+**Configuration**:
 ```python
 FRESHNESS_THRESHOLD: dict[str, timedelta] = {
     "gridwatch": timedelta(hours=1),      # Hourly updates
-    "ieso": timedelta(hours=24),          # Daily check sufficient for monthly CSVs
+    "ieso": timedelta(days=1),            # Daily check sufficient for monthly CSVs
     "oeb": timedelta(days=7),             # Weekly check for quarterly rate changes
 }
 
@@ -275,25 +262,13 @@ FRESHNESS_QUERY: dict[str, str] = {
     "ieso": "SELECT MAX(timestamp) FROM raw.ieso_generation",
     "oeb": "SELECT MAX(effective_date) FROM raw.oeb_rates",
 }
-
-def is_fresh(source: str) -> bool:
-    """Return True if DB has recent enough data for this source."""
-    if source not in FRESHNESS_THRESHOLD:
-        return False
-    try:
-        con = duckdb.connect(DB_PATH, read_only=True)
-        result = con.execute(FRESHNESS_QUERY[source]).fetchone()
-        con.close()
-        if result and result[0]:
-            age = datetime.now(timezone.utc) - result[0].replace(tzinfo=timezone.utc)
-            is_fresh = age < FRESHNESS_THRESHOLD[source]
-            if is_fresh:
-                print(f"✓ {source} is fresh (age: {age}, threshold: {FRESHNESS_THRESHOLD[source]})")
-            return is_fresh
-    except Exception as e:
-        print(f"⚠️  Freshness check failed for {source}: {e}")
-    return False
 ```
+
+**Features**:
+- Checks all three sources (gridwatch, ieso, oeb) with appropriate thresholds
+- Enhanced logging shows when sources are skipped due to freshness
+- Comprehensive unit tests cover edge cases (empty tables, NULL timestamps, timezone handling)
+- Graceful error handling when tables don't exist yet
 
 **Benefits**:
 - Reduces GitHub Actions minutes by ~30%
