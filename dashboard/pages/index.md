@@ -1,4 +1,4 @@
-# Ontario Grid — Generation & Emissions
+# Ontario Grid — Overview
 
 ```sql latest
 SELECT * FROM ontario_grid.latest
@@ -42,7 +42,7 @@ SELECT * FROM ontario_grid.co2trend
 <BigValue
     data={latest}
     value=hour
-    fmt='mmm d, yyyy'
+    fmt='mmm d, yyyy h:mm a'
     title='As of'
 />
 
@@ -68,6 +68,34 @@ SELECT * FROM ontario_grid.co2trend
     chartAreaHeight=250
 />
 
+## Recent Generation (Last Year - Hourly)
+
+<AreaChart
+    data={generation}
+    x=hour
+    y={['nuclear_mw', 'hydro_mw', 'wind_mw', 'solar_mw', 'biofuel_mw', 'gas_mw']}
+    title='Hourly Generation by Fuel Type (MW) - Last 8760 Hours'
+    yAxisTitle='MW'
+    chartAreaHeight=300
+/>
+
 ---
 
-*Data sources: IESO (fuel mix), Gridwatch.ca (CO₂ intensity), OEB (electricity rates). Updated nightly.*
+## Data Sources
+
+This dashboard combines three authoritative Ontario electricity data sources:
+
+- **[IESO (Independent Electricity System Operator)](https://www.ieso.ca/)** - Hourly generation by fuel type (nuclear, hydro, wind, solar, biofuel, gas)
+  - Source: [Generator Output by Fuel Type Reports](https://www.ieso.ca/Power-Data/Data-Directory) (monthly CSV files, 2010-present)
+
+- **[Gridwatch.ca](https://live.gridwatch.ca/)** - Real-time CO₂ intensity monitoring
+  - Calculates grid carbon intensity using IESO generation data + fuel emission factors
+  - Updates hourly with current grid conditions
+
+- **[Ontario Energy Board (OEB)](https://www.oeb.ca/)** - Electricity rates
+  - Time-of-Use (TOU), Tiered, and Ultra-Low Overnight (ULO) pricing
+  - Historical rate changes since 2010
+
+**Update Frequency**: Dashboard data refreshes nightly via automated GitHub Actions pipeline.
+
+**Historical Coverage**: 16+ years (2010-present) of hourly electricity generation and carbon intensity data.
