@@ -1,0 +1,50 @@
+[workspace]
+name = "ontario-grid-pipelines"
+version = "0.1.0"
+description = "dlt + dbt pipelines for Ontario electricity grid data"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64", "osx-64"]
+
+[dependencies]
+python = ">=3.11,<3.13"
+pandas = ">=2.0.0"
+requests = ">=2.31.0"
+beautifulsoup4 = ">=4.12.0"
+selenium = ">=4.20.0"
+openpyxl = ">=3.1.0"
+lxml = ">=5.0.0"
+python-dateutil = ">=2.9.0"
+
+[pypi-dependencies]
+# Pipeline framework (pip only)
+dlt = { version = ">=1.0.0", extras = ["duckdb"] }
+dbt-core = ">=1.8.0"
+dbt-duckdb = ">=1.8.0"
+
+# Dev dependencies
+pytest = ">=8.0.0"
+ruff = ">=0.4.0"
+
+[tasks]
+# Run the full pipeline (extract + transform)
+pipeline = "python pipeline.py"
+
+# Run specific sources
+pipeline-ieso = "python pipeline.py --sources ieso"
+pipeline-gridwatch = "python pipeline.py --sources gridwatch"
+pipeline-oeb = "python pipeline.py --sources oeb"
+
+# Run dbt transformations only
+dbt-run = "dbt run --project-dir transform --profiles-dir transform"
+dbt-test = "dbt test --project-dir transform --profiles-dir transform"
+
+# Run tests
+test = "pytest tests/ -v"
+
+# Evidence dashboard
+dashboard-dev = "cd dashboard && npm run dev"
+dashboard-build = "cd dashboard && npm run build"
+dashboard-sources = "cd dashboard && npm run sources"
+
+# Full refresh
+pipeline-full = "python pipeline.py --full-refresh"

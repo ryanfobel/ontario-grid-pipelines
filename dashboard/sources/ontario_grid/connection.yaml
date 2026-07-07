@@ -1,0 +1,4 @@
+name: ontario_grid
+type: duckdb
+options:
+  filename: ontario_grid.duckdb
