@@ -68,7 +68,7 @@ Lower values indicate cleaner grid conditions. Ontario's grid is one of the clea
     <Column id=avg_biofuel_mw fmt='#,##0' title='Biofuel (MW)'/>
     <Column id=avg_gas_mw fmt='#,##0' title='Gas (MW)'/>
     <Column id=avg_total_mw fmt='#,##0' title='Total (MW)'/>
-    <Column id=avg_clean_pct fmt='#,##0.0"%"' title='Clean %'/>
+    <Column id=avg_clean_pct fmt='pct1' title='Clean %'/>
 </DataTable>
 
 ---
