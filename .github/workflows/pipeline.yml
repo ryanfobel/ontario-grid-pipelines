@@ -2,8 +2,12 @@ name: pipeline
 
 on:
   schedule:
-    - cron: '*/15 * * * *'   # gridwatch — live data updates every 15 min
-    - cron: '0 8 * * *'      # oeb — rates change quarterly, daily check is plenty
+    # Gridwatch updates hourly - check at :05 past each hour to catch new data
+    - cron: '5 * * * *'
+    # OEB rates change quarterly - daily check is sufficient
+    - cron: '0 8 * * *'
+    # IESO publishes monthly - check weekly on Mondays
+    - cron: '0 9 * * 1'
   workflow_dispatch:
     inputs:
       sources:
@@ -58,24 +62,55 @@ jobs:
             echo "No data branch yet — first run, starting fresh"
           fi
 
-      - name: Run dlt pipeline
+      - name: Determine which sources to run
+        id: sources
         run: |
-          # Scheduled runs only fetch gridwatch (live data). IESO/OEB are run manually
-          # via workflow_dispatch since they 403 from CI IPs and change infrequently.
+          # Manual workflow_dispatch takes precedence
           if [ -n "${{ github.event.inputs.sources }}" ]; then
             SOURCES="${{ github.event.inputs.sources }}"
-          elif [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" = "0 8 * * *" ]; then
-            SOURCES="oeb"
+            echo "mode=manual" >> $GITHUB_OUTPUT
+          # Scheduled runs - match each source to its optimal frequency
           elif [ "${{ github.event_name }}" = "schedule" ]; then
-            SOURCES="gridwatch"
+            case "${{ github.event.schedule }}" in
+              "5 * * * *")
+                SOURCES="gridwatch"
+                echo "mode=hourly_gridwatch" >> $GITHUB_OUTPUT
+                ;;
+              "0 8 * * *")
+                SOURCES="oeb"
+                echo "mode=daily_oeb" >> $GITHUB_OUTPUT
+                ;;
+              "0 9 * * 1")
+                SOURCES="ieso"
+                echo "mode=weekly_ieso" >> $GITHUB_OUTPUT
+                ;;
+              *)
+                SOURCES="gridwatch"
+                echo "mode=fallback" >> $GITHUB_OUTPUT
+                ;;
+            esac
           else
             SOURCES="ieso gridwatch oeb"
+            echo "mode=all" >> $GITHUB_OUTPUT
           fi
+          echo "sources=$SOURCES" >> $GITHUB_OUTPUT
+          echo "Running sources: $SOURCES (mode: $mode)"
+
+      - name: Run dlt pipeline
+        run: |
+          SOURCES="${{ steps.sources.outputs.sources }}"
           FULL_REFRESH="${{ github.event.inputs.full_refresh }}"
+
+          echo "=== Pipeline Run: ${{ steps.sources.outputs.mode }} ==="
+          echo "Sources: $SOURCES"
+          echo "Full refresh: ${FULL_REFRESH:-false}"
+
           for SOURCE in $SOURCES; do
+            echo ""
+            echo "--- Processing: $SOURCE ---"
             python pipeline.py --sources $SOURCE --skip-dbt \
               $( [ "$FULL_REFRESH" = "true" ] && echo "--full-refresh" ) || \
-              echo "WARNING: source $SOURCE failed, continuing"
+              echo "⚠️  WARNING: source $SOURCE failed, continuing"
           done
 
       - name: Run dbt transforms
@@ -97,6 +132,13 @@ jobs:
 
           cp "$TMPDB" ontario_grid.duckdb
           git add -f ontario_grid.duckdb
-          git commit -m "data: $(date -u +%Y-%m-%dT%H:%M:%SZ) [skip ci]"
+
+          # Include which sources ran in commit message
+          SOURCES="${{ steps.sources.outputs.sources }}"
+          MODE="${{ steps.sources.outputs.mode }}"
+          git commit -m "data: $(date -u +%Y-%m-%dT%H:%M:%SZ) [$MODE: $SOURCES] [skip ci]"
+
           git push origin HEAD:data --force
           rm -f "$TMPDB"
+
+          echo "✅ Database updated and pushed (sources: $SOURCES)"
