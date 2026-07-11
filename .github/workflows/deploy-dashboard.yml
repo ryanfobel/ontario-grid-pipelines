@@ -32,7 +32,8 @@ jobs:
       - name: Fetch database from data branch
         run: |
           git fetch origin data
-          git checkout origin/data -- dashboard/sources/ontario_grid/ontario_grid.duckdb
+          git checkout origin/data -- ontario_grid.duckdb
+          mv ontario_grid.duckdb dashboard/sources/ontario_grid/
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
