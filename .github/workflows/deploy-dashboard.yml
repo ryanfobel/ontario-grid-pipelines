@@ -60,6 +60,10 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Disable Jekyll
+        working-directory: dashboard/build
+        run: touch .nojekyll
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
