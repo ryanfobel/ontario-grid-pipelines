@@ -29,6 +29,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fetch database from data branch
+        run: |
+          git fetch origin data
+          git checkout origin/data -- dashboard/sources/ontario_grid/ontario_grid.duckdb
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
