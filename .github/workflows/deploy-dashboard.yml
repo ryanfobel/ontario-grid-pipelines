@@ -44,6 +44,10 @@ jobs:
         working-directory: dashboard
         run: npm ci
 
+      - name: Extract data sources
+        working-directory: dashboard
+        run: npm run sources
+
       - name: Build dashboard
         working-directory: dashboard
         run: npm run build
