@@ -8,6 +8,6 @@ SELECT
     gas_mw,
     total_mw,
     clean_pct
-FROM main.fct_grid_generation
+FROM main_marts.fct_grid_generation
 ORDER BY hour DESC
 LIMIT 8760

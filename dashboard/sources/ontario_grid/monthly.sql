@@ -6,7 +6,7 @@ SELECT
     AVG(solar_mw) as solar,
     AVG(biofuel_mw) as biofuel,
     AVG(gas_mw) as gas
-FROM main.fct_grid_generation
-WHERE hour >= (SELECT MAX(hour) FROM main.fct_grid_generation) - INTERVAL 30 DAY
+FROM main_marts.fct_grid_generation
+WHERE hour >= (SELECT MAX(hour) FROM main_marts.fct_grid_generation) - INTERVAL 30 DAY
 GROUP BY 1
 ORDER BY 1

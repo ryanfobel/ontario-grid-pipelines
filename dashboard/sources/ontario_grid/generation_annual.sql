@@ -8,6 +8,6 @@ SELECT
     ROUND(AVG(gas_mw), 0) as avg_gas_mw,
     ROUND(AVG(total_mw), 0) as avg_total_mw,
     ROUND(AVG(clean_pct) / 100, 3) as avg_clean_pct
-FROM main.fct_grid_generation
+FROM main_marts.fct_grid_generation
 GROUP BY YEAR(hour)
 ORDER BY year
